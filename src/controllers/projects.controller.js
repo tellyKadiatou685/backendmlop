@@ -2,46 +2,82 @@
 import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import cloudinary from '../utils/cloudinary.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const { dirname } = path;
 
 const prisma = new PrismaClient();
 
-// Configuration du stockage des images
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads/projects');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, 'project-' + uniqueSuffix + ext);
-  }
-});
+// Configuration du stockage en mémoire pour Cloudinary
+const storage = multer.memoryStorage();
 
 export const upload = multer({ 
   storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // Limite à 5MB
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif/;
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
     
     if (extname && mimetype) {
       return cb(null, true);
     } else {
-      cb('Erreur: Seules les images sont acceptées!');
+      cb(new Error('Erreur: Seules les images sont acceptées!'));
     }
   }
-});
+}).single('image');
+
+// Middleware d'upload
+export const handleImageUpload = (req, res, next) => {
+  upload(req, res, function(err) {
+    if (err instanceof multer.MulterError) {
+      console.error('Erreur Multer:', err);
+      return res.status(400).json({ message: `Erreur d'upload: ${err.message}` });
+    } else if (err) {
+      console.error('Erreur générale:', err);
+      return res.status(400).json({ message: err.message });
+    }
+    
+    console.log('Body après upload:', req.body);
+    console.log('File après upload:', req.file);
+    
+    next();
+  });
+};
+
+// Upload image vers Cloudinary
+const uploadToCloudinary = async (fileBuffer, filename) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { 
+        folder: 'projects', 
+        public_id: filename,
+        resource_type: 'auto'
+      },
+      (error, result) => {
+        if (error) {
+          console.error('Erreur Cloudinary:', error);
+          reject(error);
+        } else {
+          console.log('Image uploadée avec succès à:', result.secure_url);
+          resolve(result.secure_url);
+        }
+      }
+    );
+    
+    // Gestion des erreurs de stream
+    uploadStream.on('error', (error) => {
+      console.error('Erreur de stream Cloudinary:', error);
+      reject(error);
+    });
+    
+    // Envoi du buffer au stream
+    uploadStream.end(fileBuffer);
+  });
+};
 
 // Récupérer tous les projets
 export const getAllProjects = async (req, res) => {
@@ -98,12 +134,34 @@ export const getProjectById = async (req, res) => {
 // Créer un nouveau projet
 export const createProject = async (req, res) => {
   try {
+    console.log('Données reçues dans createProject:', req.body);
+    console.log('Fichier reçu dans createProject:', req.file);
+    
     const { title, description, status, startDate, endDate, budget } = req.body;
     const managerId = req.user.id;
     
-    let imageFilename = null;
+    // Gérer l'image si elle existe
+    let imageUrl = null;
     if (req.file) {
-      imageFilename = req.file.filename;
+      try {
+        console.log('Tentative d\'upload de fichier:', {
+          filename: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+          bufferLength: req.file.buffer ? req.file.buffer.length : 0
+        });
+        
+        const result = await uploadToCloudinary(
+          req.file.buffer, 
+          `project-${Date.now()}`
+        );
+        imageUrl = result;
+        console.log('Image uploadée avec succès:', imageUrl);
+      } catch (uploadError) {
+        console.error('Erreur détaillée lors de l\'upload:', uploadError);
+        // Ne pas arrêter le processus, continuer avec imageUrl = null
+        console.log('Continuation du processus sans image');
+      }
     }
     
     const newProject = await prisma.project.create({
@@ -114,7 +172,7 @@ export const createProject = async (req, res) => {
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         budget,
-        image: imageFilename,
+        image: imageUrl,
         managerId
       },
       include: {
@@ -127,12 +185,13 @@ export const createProject = async (req, res) => {
       }
     });
     
+    console.log('Projet créé avec succès:', newProject);
     res.status(201).json({
       message: 'Projet créé avec succès',
       project: newProject
     });
   } catch (error) {
-    console.error('Erreur lors de la création du projet:', error);
+    console.error('Erreur détaillée lors de la création du projet:', error);
     res.status(500).json({ message: 'Erreur lors de la création du projet' });
   }
 };
@@ -141,6 +200,9 @@ export const createProject = async (req, res) => {
 export const updateProject = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log('Données reçues dans updateProject:', req.body);
+    console.log('Fichier reçu dans updateProject:', req.file);
+    
     const { title, description, status, startDate, endDate, budget } = req.body;
     
     // Vérifier si le projet existe
@@ -154,25 +216,35 @@ export const updateProject = async (req, res) => {
     
     // Préparer les données à mettre à jour
     const updateData = {
-      title,
-      description,
-      status,
-      startDate: startDate ? new Date(startDate) : undefined,
-      endDate: endDate ? new Date(endDate) : null,
-      budget
+      title: title || existingProject.title,
+      description: description || existingProject.description,
+      status: status || existingProject.status,
+      startDate: startDate ? new Date(startDate) : existingProject.startDate,
+      endDate: endDate ? new Date(endDate) : existingProject.endDate,
+      budget: budget || existingProject.budget
     };
     
-    // Traiter l'image si elle est fournie
+    // Gérer l'image si elle existe
     if (req.file) {
-      // Supprimer l'ancienne image si elle existe
-      if (existingProject.image) {
-        const imagePath = path.join(__dirname, '../../uploads/projects', existingProject.image);
-        if (fs.existsSync(imagePath)) {
-          fs.unlinkSync(imagePath);
-        }
+      try {
+        console.log('Tentative d\'upload de fichier pour mise à jour:', {
+          filename: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+          bufferLength: req.file.buffer ? req.file.buffer.length : 0
+        });
+        
+        const result = await uploadToCloudinary(
+          req.file.buffer, 
+          `project-update-${Date.now()}`
+        );
+        updateData.image = result;
+        console.log('Image mise à jour avec succès:', updateData.image);
+      } catch (uploadError) {
+        console.error('Erreur détaillée lors de l\'upload pour mise à jour:', uploadError);
+        // Garder l'ancienne image en cas d'erreur
+        console.log('Conservation de l\'ancienne image en cas d\'erreur');
       }
-      
-      updateData.image = req.file.filename;
     }
     
     // Mettre à jour le projet
@@ -189,12 +261,13 @@ export const updateProject = async (req, res) => {
       }
     });
     
+    console.log('Projet mis à jour avec succès:', updatedProject);
     res.status(200).json({
       message: 'Projet mis à jour avec succès',
       project: updatedProject
     });
   } catch (error) {
-    console.error('Erreur lors de la mise à jour du projet:', error);
+    console.error('Erreur détaillée lors de la mise à jour du projet:', error);
     res.status(500).json({ message: 'Erreur lors de la mise à jour du projet' });
   }
 };
@@ -213,15 +286,7 @@ export const deleteProject = async (req, res) => {
       return res.status(404).json({ message: 'Projet non trouvé' });
     }
     
-    // Supprimer l'image associée si elle existe
-    if (existingProject.image) {
-      const imagePath = path.join(__dirname, '../../uploads/projects', existingProject.image);
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
-    }
-    
-    // Supprimer le projet
+    // Supprimer le projet (pas besoin de supprimer l'image de Cloudinary)
     await prisma.project.delete({
       where: { id: Number(id) }
     });

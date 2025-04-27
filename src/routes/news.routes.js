@@ -1,27 +1,26 @@
 // src/routes/news.routes.js
 import express from 'express';
-import { 
-  getAllNews, 
-  getNewsById, 
-  createNews, 
-  updateNews, 
-  deleteNews,
+import {
+  getAllNews,
+  getNewsById,
   getNewsByCategory,
-  upload // Importez upload au lieu de handleImageUpload
+  createNews,
+  updateNews,
+  deleteNews,
+  handleImageUpload
 } from '../controllers/news.controller.js';
 import { authenticateToken } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// Routes publiques
+// Routes publiques - accessibles sans authentification
 router.get('/', getAllNews);
+router.get('/category/:category', getNewsByCategory);
 router.get('/:id', getNewsById);
 
-// Routes protégées
-router.post('/', authenticateToken, upload.any(), createNews); // Utiliser upload.any() directement
-router.put('/:id', authenticateToken, upload.any(), updateNews);
+// Routes protégées - nécessitent une authentification
+router.post('/', authenticateToken, handleImageUpload, createNews);
+router.put('/:id', authenticateToken, handleImageUpload, updateNews);
 router.delete('/:id', authenticateToken, deleteNews);
-// Dans votre fichier de routes
-router.get('/news/category/:category', getNewsByCategory);
 
 export default router;

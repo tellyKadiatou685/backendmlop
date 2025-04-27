@@ -1,24 +1,24 @@
 // src/routes/projects.routes.js
 import express from 'express';
-import { 
-  getAllProjects, 
-  getProjectById, 
-  createProject, 
-  updateProject, 
+import {
+  getAllProjects,
+  getProjectById,
+  createProject,
+  updateProject,
   deleteProject,
-  upload
+  handleImageUpload
 } from '../controllers/projects.controller.js';
 import { authenticateToken } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// Routes publiques
+// Routes publiques - accessibles sans authentification
 router.get('/', getAllProjects);
 router.get('/:id', getProjectById);
 
-// Routes protégées (nécessitent une authentification)
-router.post('/', authenticateToken, upload.single('image'), createProject);
-router.put('/:id', authenticateToken, upload.single('image'), updateProject);
+// Routes protégées - nécessitent une authentification
+router.post('/', authenticateToken, handleImageUpload, createProject);
+router.put('/:id', authenticateToken, handleImageUpload, updateProject);
 router.delete('/:id', authenticateToken, deleteProject);
 
 export default router;

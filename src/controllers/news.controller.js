@@ -2,46 +2,82 @@
 import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import cloudinary from '../utils/cloudinary.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const prisma = new PrismaClient();
 
-// Configuration du stockage des images
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads/news');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, 'news-' + uniqueSuffix + ext);
-  }
-});
+// Configuration du stockage en mémoire pour Cloudinary
+const storage = multer.memoryStorage();
 
 export const upload = multer({ 
   storage,
-  limits: { fileSize: 20 * 1024 * 1024 }, // Limite à 5MB
+  limits: { fileSize: 20 * 1024 * 1024 }, // Limite à 20MB
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif/;
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
     
     if (extname && mimetype) {
       return cb(null, true);
     } else {
-      cb('Erreur: Seules les images sont acceptées!');
+      cb(new Error('Erreur: Seules les images sont acceptées!'));
     }
   }
-});
+}).single('image'); // Changé de .any() à .single('image')
+
+// Middleware d'upload
+export const handleImageUpload = (req, res, next) => {
+  upload(req, res, function(err) {
+    if (err instanceof multer.MulterError) {
+      console.error('Erreur Multer:', err);
+      return res.status(400).json({ message: `Erreur d'upload: ${err.message}` });
+    } else if (err) {
+      console.error('Erreur générale:', err);
+      return res.status(400).json({ message: err.message });
+    }
+    
+    console.log('Body après upload:', req.body);
+    console.log('File après upload:', req.file);
+    
+    next();
+  });
+};
+
+// Upload image vers Cloudinary
+const uploadToCloudinary = async (fileBuffer, filename) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { 
+        folder: 'news', 
+        public_id: filename,
+        resource_type: 'auto'
+      },
+      (error, result) => {
+        if (error) {
+          console.error('Erreur Cloudinary:', error);
+          reject(error);
+        } else {
+          console.log('Image uploadée avec succès à:', result.secure_url);
+          resolve(result.secure_url);
+        }
+      }
+    );
+    
+    // Gestion des erreurs de stream
+    uploadStream.on('error', (error) => {
+      console.error('Erreur de stream Cloudinary:', error);
+      reject(error);
+    });
+    
+    // Envoi du buffer au stream
+    uploadStream.end(fileBuffer);
+  });
+};
 
 // Récupérer toutes les actualités
 export const getAllNews = async (req, res) => {
@@ -97,59 +133,80 @@ export const getNewsById = async (req, res) => {
 
 // Créer une nouvelle actualité
 export const createNews = async (req, res) => {
-    try {
-      console.log('Body reçu:', req.body);
-      console.log('Files reçus:', req.files);
-      console.log('User:', req.user);
-      
-      const { title, content, category } = req.body;
-      const authorId = req.user.id;
-      
-      // Vérifier les données requises
-      if (!title || !content) {
-        return res.status(400).json({ message: 'Le titre et le contenu sont requis' });
+  try {
+    console.log('Données reçues dans createNews:', req.body);
+    console.log('Fichier reçu dans createNews:', req.file);
+    console.log('User:', req.user);
+    
+    const { title, content, category } = req.body;
+    const authorId = req.user.id;
+    
+    // Vérifier les données requises
+    if (!title || !content) {
+      return res.status(400).json({ message: 'Le titre et le contenu sont requis' });
+    }
+    
+    // Gérer l'image si elle existe
+    let imageUrl = null;
+    if (req.file) {
+      try {
+        console.log('Tentative d\'upload de fichier:', {
+          filename: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+          bufferLength: req.file.buffer ? req.file.buffer.length : 0
+        });
+        
+        const result = await uploadToCloudinary(
+          req.file.buffer, 
+          `news-${Date.now()}`
+        );
+        imageUrl = result;
+        console.log('Image uploadée avec succès:', imageUrl);
+      } catch (uploadError) {
+        console.error('Erreur détaillée lors de l\'upload:', uploadError);
+        // Ne pas arrêter le processus, continuer avec imageUrl = null
+        console.log('Continuation du processus sans image');
       }
-      
-      // Gérer l'image si elle existe
-      let imageFilename = null;
-      if (req.files && req.files.length > 0) {
-        imageFilename = req.files[0].filename;
-        console.log("Fichier trouvé:", req.files[0].originalname, "dans le champ", req.files[0].fieldname);
-      }
-      
-      // Créer l'actualité
-      const newNews = await prisma.news.create({
-        data: {
-          title,
-          content,
-          category,
-          image: imageFilename,
-          authorId
-        },
-        include: {
-          author: {
-            select: {
-              id: true,
-              username: true
-            }
+    }
+    
+    // Créer l'actualité
+    const newNews = await prisma.news.create({
+      data: {
+        title,
+        content,
+        category,
+        image: imageUrl,
+        authorId
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true
           }
         }
-      });
-      
-      res.status(201).json({
-        message: 'Actualité créée avec succès',
-        news: newNews
-      });
-    } catch (error) {
-      console.error('Erreur lors de la création de l\'actualité:', error);
-      res.status(500).json({ message: 'Erreur lors de la création de l\'actualité' });
-    }
-  };
+      }
+    });
+    
+    console.log('Actualité créée avec succès:', newNews);
+    res.status(201).json({
+      message: 'Actualité créée avec succès',
+      news: newNews
+    });
+  } catch (error) {
+    console.error('Erreur détaillée lors de la création de l\'actualité:', error);
+    res.status(500).json({ message: 'Erreur lors de la création de l\'actualité' });
+  }
+};
 
 // Mettre à jour une actualité
 export const updateNews = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log('Données reçues dans updateNews:', req.body);
+    console.log('Fichier reçu dans updateNews:', req.file);
+    
     const { title, content, category } = req.body;
     
     // Vérifier si l'actualité existe
@@ -163,22 +220,32 @@ export const updateNews = async (req, res) => {
     
     // Préparer les données à mettre à jour
     const updateData = {
-      title,
-      content,
-      category
+      title: title || existingNews.title,
+      content: content || existingNews.content,
+      category: category || existingNews.category
     };
     
-    // Traiter l'image si elle est fournie
+    // Gérer l'image si elle existe
     if (req.file) {
-      // Supprimer l'ancienne image si elle existe
-      if (existingNews.image) {
-        const imagePath = path.join(__dirname, '../../uploads/news', existingNews.image);
-        if (fs.existsSync(imagePath)) {
-          fs.unlinkSync(imagePath);
-        }
+      try {
+        console.log('Tentative d\'upload de fichier pour mise à jour:', {
+          filename: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+          bufferLength: req.file.buffer ? req.file.buffer.length : 0
+        });
+        
+        const result = await uploadToCloudinary(
+          req.file.buffer, 
+          `news-update-${Date.now()}`
+        );
+        updateData.image = result;
+        console.log('Image mise à jour avec succès:', updateData.image);
+      } catch (uploadError) {
+        console.error('Erreur détaillée lors de l\'upload pour mise à jour:', uploadError);
+        // Garder l'ancienne image en cas d'erreur
+        console.log('Conservation de l\'ancienne image en cas d\'erreur');
       }
-      
-      updateData.image = req.file.filename;
     }
     
     // Mettre à jour l'actualité
@@ -195,12 +262,13 @@ export const updateNews = async (req, res) => {
       }
     });
     
+    console.log('Actualité mise à jour avec succès:', updatedNews);
     res.status(200).json({
       message: 'Actualité mise à jour avec succès',
       news: updatedNews
     });
   } catch (error) {
-    console.error('Erreur lors de la mise à jour de l\'actualité:', error);
+    console.error('Erreur détaillée lors de la mise à jour de l\'actualité:', error);
     res.status(500).json({ message: 'Erreur lors de la mise à jour de l\'actualité' });
   }
 };
@@ -248,15 +316,7 @@ export const deleteNews = async (req, res) => {
       return res.status(404).json({ message: 'Actualité non trouvée' });
     }
     
-    // Supprimer l'image associée si elle existe
-    if (existingNews.image) {
-      const imagePath = path.join(__dirname, '../../uploads/news', existingNews.image);
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
-    }
-    
-    // Supprimer l'actualité
+    // Supprimer l'actualité (pas besoin de supprimer l'image de Cloudinary)
     await prisma.news.delete({
       where: { id: Number(id) }
     });
