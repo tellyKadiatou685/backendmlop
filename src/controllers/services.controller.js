@@ -49,28 +49,33 @@ export const handleImageUpload = (req, res, next) => {
 
 // Upload image vers Cloudinary
 const uploadToCloudinary = async (fileBuffer, filename) => {
-  try {
-    return new Promise((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        { 
-          folder: 'services', 
-          public_id: filename,
-          resource_type: 'auto'
-        },
-        (error, result) => {
-          if (error) {
-            console.error('Erreur Cloudinary:', error);
-            reject(error);
-          } else {
-            resolve(result.secure_url);
-          }
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { 
+        folder: 'services', 
+        public_id: filename,
+        resource_type: 'auto'
+      },
+      (error, result) => {
+        if (error) {
+          console.error('Erreur Cloudinary:', error);
+          reject(error);
+        } else {
+          console.log('Image uploadée avec succès à:', result.secure_url);
+          resolve(result.secure_url);
         }
-      ).end(fileBuffer);
+      }
+    );
+    
+    // Gestion des erreurs de stream
+    uploadStream.on('error', (error) => {
+      console.error('Erreur de stream Cloudinary:', error);
+      reject(error);
     });
-  } catch (error) {
-    console.error('Exception lors de l\'upload Cloudinary:', error);
-    throw new Error('Échec de l\'upload vers Cloudinary');
-  }
+    
+    // Envoi du buffer au stream
+    uploadStream.end(fileBuffer);
+  });
 };
 
 // GET all services
@@ -151,6 +156,13 @@ export const createService = async (req, res) => {
     let imageUrl = null;
     if (req.file) {
       try {
+        console.log('Tentative d\'upload de fichier:', {
+          filename: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+          bufferLength: req.file.buffer ? req.file.buffer.length : 0
+        });
+        
         const result = await uploadToCloudinary(
           req.file.buffer, 
           `service-${Date.now()}`
@@ -158,8 +170,9 @@ export const createService = async (req, res) => {
         imageUrl = result;
         console.log('Image uploadée avec succès:', imageUrl);
       } catch (uploadError) {
-        console.error('Erreur lors de l\'upload de l\'image:', uploadError);
-        return res.status(500).json({ message: 'Erreur lors de l\'upload de l\'image' });
+        console.error('Erreur détaillée lors de l\'upload:', uploadError);
+        // Ne pas arrêter le processus, continuer avec imageUrl = null
+        console.log('Continuation du processus sans image');
       }
     }
 
