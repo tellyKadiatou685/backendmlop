@@ -1,266 +1,182 @@
-// src/controllers/services.controller.js
 import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import cloudinary from '../utils/cloudinary.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
 const prisma = new PrismaClient();
 
-// Configuration pour l'upload d'images
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads/services');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, 'service-' + uniqueSuffix + ext);
-  }
-});
+// Multer config mémoire (upload vers Cloudinary)
+const storage = multer.memoryStorage();
 
-// Configuration multer pour accepter n'importe quel champ
 export const upload = multer({ 
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // Limite à 5MB
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    console.log('Fichier reçu:', file.fieldname, file.originalname, file.mimetype);
-    
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
     
     if (extname && mimetype) {
-      return cb(null, true);
+      cb(null, true);
     } else {
-      cb(new Error('Erreur: Seules les images sont acceptées!'));
+      cb(new Error('Seules les images sont autorisées.'));
     }
   }
-}).any(); // Accepte n'importe quel champ de fichier
+}).any();
 
-// Récupérer tous les services
-export const getAllServices = async (req, res) => {
-  try {
-    const services = await prisma.service.findMany({
-      orderBy: {
-        createdAt: 'desc'
+// Upload image vers Cloudinary
+const uploadToCloudinary = async (fileBuffer, filename) => {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_stream(
+      { folder: 'services', public_id: filename },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result.secure_url);
       }
-    });
-    
-    res.status(200).json(services);
-  } catch (error) {
-    console.error('Erreur lors de la récupération des services:', error);
-    res.status(500).json({ message: 'Erreur lors de la récupération des services' });
-  }
+    ).end(fileBuffer);
+  });
 };
 
-// Récupérer les services par catégorie
-export const getServicesByCategory = async (req, res) => {
-  try {
-    const { category } = req.params;
-    
-    // Vérifier que la catégorie est valide
-    if (!['EDUCATION', 'SANTE', 'INFRASTRUCTURES'].includes(category)) {
-      return res.status(400).json({ message: 'Catégorie invalide' });
-    }
-    
-    const services = await prisma.service.findMany({
-      where: { category },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
-    
-    res.status(200).json(services);
-  } catch (error) {
-    console.error('Erreur lors de la récupération des services:', error);
-    res.status(500).json({ message: 'Erreur lors de la récupération des services' });
-  }
-};
-
-// Récupérer un service par son ID
-export const getServiceById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const service = await prisma.service.findUnique({
-      where: { id: Number(id) }
-    });
-    
-    if (!service) {
-      return res.status(404).json({ message: 'Service non trouvé' });
-    }
-    
-    res.status(200).json(service);
-  } catch (error) {
-    console.error('Erreur lors de la récupération du service:', error);
-    res.status(500).json({ message: 'Erreur lors de la récupération du service' });
-  }
-};
-
-// Middleware pour traiter l'upload d'image
+// Middleware d'upload
 export const handleImageUpload = (req, res, next) => {
-  console.log("Headers:", req.headers);
-  console.log("Content-Type:", req.headers['content-type']);
-  
   upload(req, res, function(err) {
-    console.log("Req body après upload:", req.body);
-    console.log("Req files après upload:", req.files);
-    
-    if (err instanceof multer.MulterError) {
-      console.error('Erreur Multer:', err);
-      return res.status(400).json({ message: `Erreur lors de l'upload de l'image: ${err.message}` });
-    } else if (err) {
-      console.error('Erreur:', err);
-      return res.status(400).json({ message: `Erreur: ${err.message}` });
+    if (err instanceof multer.MulterError || err) {
+      return res.status(400).json({ message: err.message });
     }
-    
-    // Tout est OK, passer au contrôleur suivant
     next();
   });
 };
 
-// Créer un nouveau service
+// GET all services
+export const getAllServices = async (req, res) => {
+  try {
+    const services = await prisma.service.findMany({ orderBy: { createdAt: 'desc' } });
+    res.status(200).json(services);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+};
+
+// GET services by category
+export const getServicesByCategory = async (req, res) => {
+  const { category } = req.params;
+  if (!['EDUCATION', 'SANTE', 'INFRASTRUCTURES'].includes(category)) {
+    return res.status(400).json({ message: 'Catégorie invalide' });
+  }
+  try {
+    const services = await prisma.service.findMany({
+      where: { category },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.status(200).json(services);
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+};
+
+// GET single service
+export const getServiceById = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const service = await prisma.service.findUnique({ where: { id: Number(id) } });
+    if (!service) return res.status(404).json({ message: 'Service non trouvé' });
+    res.status(200).json(service);
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+};
+
+// POST create new service
 export const createService = async (req, res) => {
   try {
-    console.log('Body reçu:', req.body);
-    console.log('Files reçus:', req.files);
-    
     const { category, title, icon, description } = req.body;
-    
-    // Vérifier les données requises
     if (!category || !title || !description) {
-      return res.status(400).json({ message: 'Tous les champs obligatoires doivent être remplis' });
+      return res.status(400).json({ message: 'Champs requis manquants' });
     }
-    
-    // Vérifier que la catégorie est valide
+
     if (!['EDUCATION', 'SANTE', 'INFRASTRUCTURES'].includes(category)) {
       return res.status(400).json({ message: 'Catégorie invalide' });
     }
-    
-    // Gérer l'image si elle existe
-    let imageFilename = null;
+
+    let imageUrl = null;
     if (req.files && req.files.length > 0) {
-      imageFilename = req.files[0].filename;
-      console.log("Fichier trouvé:", req.files[0].originalname, "dans le champ", req.files[0].fieldname);
+      const result = await uploadToCloudinary(req.files[0].buffer, `service-${Date.now()}`);
+      imageUrl = result;
     }
 
-    // Créer le service
     const newService = await prisma.service.create({
       data: {
         category,
         title,
-        icon: icon || 'default-icon', // Valeur par défaut si non fournie
+        icon: icon || 'default-icon',
         description,
-        image: imageFilename
+        image: imageUrl
       }
     });
-    
-    res.status(201).json({
-      message: 'Service créé avec succès',
-      service: newService
-    });
+
+    res.status(201).json({ message: 'Service créé avec succès', service: newService });
   } catch (error) {
-    console.error('Erreur lors de la création du service:', error);
-    res.status(500).json({ message: 'Erreur lors de la création du service' });
+    console.error(error);
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 };
 
-// Mettre à jour un service
+// PUT update service
 export const updateService = async (req, res) => {
   try {
     const { id } = req.params;
     const { category, title, icon, description } = req.body;
-    
-    // Vérifier si le service existe
-    const existingService = await prisma.service.findUnique({
-      where: { id: Number(id) }
-    });
-    
-    if (!existingService) {
-      return res.status(404).json({ message: 'Service non trouvé' });
-    }
-    
-    // Vérifier que la catégorie est valide si fournie
+
+    const existingService = await prisma.service.findUnique({ where: { id: Number(id) } });
+    if (!existingService) return res.status(404).json({ message: 'Service non trouvé' });
+
     if (category && !['EDUCATION', 'SANTE', 'INFRASTRUCTURES'].includes(category)) {
       return res.status(400).json({ message: 'Catégorie invalide' });
     }
-    
-    // Préparer les données à mettre à jour
-    const updateData = {
-      category: category || existingService.category,
-      title: title || existingService.title,
-      description: description || existingService.description,
-      icon: icon || existingService.icon
-    };
-    
-    // Traiter l'image si elle est fournie
+
+    let imageUrl = existingService.image;
     if (req.files && req.files.length > 0) {
-      // Supprimer l'ancienne image si elle existe
-      if (existingService.image) {
-        const imagePath = path.join(__dirname, '../../uploads/services', existingService.image);
-        if (fs.existsSync(imagePath)) {
-          fs.unlinkSync(imagePath);
-        }
-      }
-      
-      updateData.image = req.files[0].filename;
+      const result = await uploadToCloudinary(req.files[0].buffer, `service-${Date.now()}`);
+      imageUrl = result;
     }
-    
-    // Mettre à jour le service
+
     const updatedService = await prisma.service.update({
       where: { id: Number(id) },
-      data: updateData
+      data: {
+        category: category || existingService.category,
+        title: title || existingService.title,
+        icon: icon || existingService.icon,
+        description: description || existingService.description,
+        image: imageUrl
+      }
     });
-    
-    res.status(200).json({
-      message: 'Service mis à jour avec succès',
-      service: updatedService
-    });
+
+    res.status(200).json({ message: 'Service mis à jour', service: updatedService });
   } catch (error) {
-    console.error('Erreur lors de la mise à jour du service:', error);
-    res.status(500).json({ message: 'Erreur lors de la mise à jour du service' });
+    console.error(error);
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 };
 
-// Supprimer un service
+// DELETE service
 export const deleteService = async (req, res) => {
   try {
     const { id } = req.params;
-    
-    // Vérifier si le service existe
-    const existingService = await prisma.service.findUnique({
-      where: { id: Number(id) }
-    });
-    
-    if (!existingService) {
-      return res.status(404).json({ message: 'Service non trouvé' });
-    }
-    
-    // Supprimer l'image associée si elle existe
-    if (existingService.image) {
-      const imagePath = path.join(__dirname, '../../uploads/services', existingService.image);
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
-    }
-    
-    // Supprimer le service
-    await prisma.service.delete({
-      where: { id: Number(id) }
-    });
-    
-    res.status(200).json({ message: 'Service supprimé avec succès' });
+
+    const existingService = await prisma.service.findUnique({ where: { id: Number(id) } });
+    if (!existingService) return res.status(404).json({ message: 'Service non trouvé' });
+
+    await prisma.service.delete({ where: { id: Number(id) } });
+
+    res.status(200).json({ message: 'Service supprimé' });
   } catch (error) {
-    console.error('Erreur lors de la suppression du service:', error);
-    res.status(500).json({ message: 'Erreur lors de la suppression du service' });
+    console.error(error);
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 };
