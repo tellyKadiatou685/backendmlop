@@ -26,7 +26,7 @@ export const upload = multer({
       cb(new Error('Seules les images sont autorisées.'));
     }
   }
-}).single('file'); // Changé de .any() à .single('file') pour plus de clarté
+}).single('image'); // Changé de 'file' à 'image' pour correspondre au nom dans la base de données
 
 // Middleware d'upload
 export const handleImageUpload = (req, res, next) => {

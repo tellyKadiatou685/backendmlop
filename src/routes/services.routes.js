@@ -18,7 +18,7 @@ router.get('/category/:category', getServicesByCategory);
 router.get('/:id', getServiceById);
 
 // Routes protégées - nécessitent une authentification
-router.post('/', authenticateToken, handleImageUpload, createService);
+router.post('/',  handleImageUpload, createService);
 router.put('/:id', authenticateToken, handleImageUpload, updateService);
 router.delete('/:id', authenticateToken, deleteService);
 
