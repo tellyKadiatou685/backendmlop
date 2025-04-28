@@ -24,15 +24,18 @@ dotenv.config();
 const app = express();
 
 // Configuration CORS - TRÈS IMPORTANT de le mettre en premier
+// Configuration CORS - TRÈS IMPORTANT de le mettre en premier
 const corsOptions = {
   origin: [
     'http://localhost:8081',
     'http://localhost:5173',
     'http://192.168.1.21:8081',
     'https://mlomp-dynamique.onrender.com',
-    'https://mlomp-dynamique-lid9-a9g0kxs5v.vercel.app'  // Si vous utilisez aussi Vercel
+    'https://mlomp-dynamique-lid9-a9g0kxs5v.vercel.app',
+    'https://mlomp.sn',           // Ajoutez cette ligne
+    'https://www.mlomp.sn'        // Ajoutez cette ligne
   ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  // OPTIONS est important pour les requêtes préliminaires
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true,
   preflightContinue: false,
