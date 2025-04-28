@@ -30,7 +30,7 @@ const corsOptions = {
     'http://localhost:5173',
     'http://192.168.1.21:8081',
     'https://mlomp-dynamique.onrender.com',
-    'https://mlomp-dynamique.vercel.app'  // Si vous utilisez aussi Vercel
+    'https://mlomp-dynamique-lid9-a9g0kxs5v.vercel.app'  // Si vous utilisez aussi Vercel
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  // OPTIONS est important pour les requêtes préliminaires
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
