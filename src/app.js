@@ -11,6 +11,7 @@ import servicesRoutes from './routes/services.routes.js';
 import newsRoutes from './routes/news.routes.js';
 import administrativeProceduresRoutes from './routes/administrativeProcedures.routes.js';
 import investmentRoutes from './routes/investments.routes.js';
+import projectsRoutes from './routes/projects.routes.js';
 
 // Pour obtenir l'équivalent de __dirname en ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -74,6 +75,7 @@ app.use('/api/services', servicesRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/Procedures', administrativeProceduresRoutes);
 app.use('/api/investments', investmentRoutes);
+app.use('/api/projects', projectsRoutes);
 
 // Route de test CORS
 app.get('/api/cors-test', (req, res) => {
