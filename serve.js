@@ -13,16 +13,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Configurer CORS
-app.use(cors({
-  origin: [
-    'http://localhost:8081',
-    'http://192.168.1.21:8081',
-    'https://mlomp-dynamique.onrender.com' // Ajout du nouveau lien frontend
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
+ials: true
+
 
 // Servir les fichiers statiques
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
