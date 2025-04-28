@@ -15,9 +15,9 @@ const __dirname = path.dirname(__filename);
 // Configurer CORS
 app.use(cors({
   origin: [
-    'http://localhost:8081', 
+    'http://localhost:8081',
     'http://192.168.1.21:8081',
-    'https://backendmlop-2.onrender.com'
+    'https://mlomp-dynamique.onrender.com' // Ajout du nouveau lien frontend
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
