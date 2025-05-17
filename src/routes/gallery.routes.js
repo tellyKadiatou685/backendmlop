@@ -5,18 +5,13 @@ import {
   getGalleryItemById,
   updateGalleryItem,
   deleteGalleryItem,
+  uploadMiddleware
 } from "../controllers/gallery.controller.js";
-import {
-   
-    handleImageUpload
-  } from '../controllers/news.controller.js';
-
-
 
 const router = express.Router();
 
 // Créer un média (image/vidéo)
-router.post("/",  handleImageUpload, createGalleryItem);
+router.post("/",  uploadMiddleware, createGalleryItem);
 
 // Récupérer tous les médias
 router.get("/", getAllGalleryItems);
@@ -25,7 +20,7 @@ router.get("/", getAllGalleryItems);
 router.get("/:id", getGalleryItemById);
 
 // Modifier un média (changer le fichier ou les infos)
-router.put("/:id",  handleImageUpload, updateGalleryItem);
+router.put("/:id", uploadMiddleware, updateGalleryItem);
 
 // Supprimer un média
 router.delete("/:id", deleteGalleryItem);
