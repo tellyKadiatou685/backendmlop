@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,21 +6,103 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
 model User {
-  id              Int       @id @default(autoincrement())
-  username        String    @unique
-  email           String    @unique
-  password        String
-  role            Role      @default(EDITOR)
-  resetToken      String?   // Token pour réinitialisation du mot de passe
-  resetTokenExpiry DateTime? // Date d'expiration du token
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  news      News[] 
-  Project     Project[]
-  investments     Investment[]
+  id               Int          @id @default(autoincrement())
+  username         String       @unique
+  email            String       @unique
+  password         String
+  role             Role         @default(EDITOR)
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  investments      Investment[]
+  news             News[]
+  Project          Project[]
+}
+
+model AdministrativeProcedure {
+  id             Int      @id @default(autoincrement())
+  title          String
+  description    String
+  icon           String?
+  requiredDocs   String
+  processingTime Int
+  category       String
+  onlineUrl      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+model Gallery {
+  id        String   @id @default(uuid())
+  title     String
+  mediaUrl  String
+  type      MediaType
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
 
 
+
+model Service {
+  id          Int      @id @default(autoincrement())
+  category    Category
+  title       String
+  icon        String
+  description String
+  image       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model News {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String
+  image     String?
+  category  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  authorId  Int
+  author    User     @relation(fields: [authorId], references: [id])
+}
+
+model Project {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String
+  status      String
+  startDate   DateTime
+  endDate     DateTime?
+  budget      String?
+  image       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  managerId   Int
+  manager     User      @relation(fields: [managerId], references: [id])
+}
+
+model Investment {
+  id               Int      @id @default(autoincrement())
+  title            String
+  category         String
+  description      String
+  shortDescription String?
+  amount           String
+  startYear        String?
+  endYear          String?
+  status           String
+  image            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  managerId        Int?
+  manager          User?    @relation(fields: [managerId], references: [id])
 }
 
 enum Role {
@@ -31,74 +110,9 @@ enum Role {
   EDITOR
   VIEWER
 }
-model AdministrativeProcedure {
-  id              Int      @id @default(autoincrement())
-  title           String   // Titre de la démarche (ex: "Acte de naissance")
-  description     String   // Description courte (ex: "Demande de copie ou d'extrait d'acte de naissance")
-  icon            String?  // Nom de l'icône (ex: "document", "id-card", "certificate", "marriage")
-  requiredDocs    String   @db.Text // Liste des documents requis au format JSON
-  processingTime  Int      // Délai de traitement en jours
-  category        String   // Catégorie de la démarche (ex: "ETAT_CIVIL", "URBANISME", "SOCIAL")
-  onlineUrl       String?  // URL pour la demande en ligne (optionnel)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}
-
-model Service {
-  id          Int       @id @default(autoincrement())
-  category    Category  // Enum avec les 3 catégories
-  title       String
-  icon        String    // Icône pour représenter le service
-  description String    @db.Text
-  image       String?   // Chemin de l'image principale
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-}
 
 enum Category {
   EDUCATION
   SANTE
   INFRASTRUCTURES
-}
-// Extrait du fichier prisma/schema.prisma pour le modèle News
-model News {
-  id        Int      @id @default(autoincrement())
-  title     String
-  content   String   @db.Text
-  image     String?  // Chemin de l'image uploadée (optionnel)
-  category  String?  // Catégorie de l'actualité (optionnel)
-  createdAt DateTime @default(now()) // Cette date servira de date de publication
-  updatedAt DateTime @updatedAt
-  authorId  Int
-  author    User     @relation(fields: [authorId], references: [id])
-}
-model Project {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String   @db.Text
-  status      String   // PLANNED, IN_PROGRESS, COMPLETED, CANCELLED
-  startDate   DateTime
-  endDate     DateTime?
-  budget      String?
-  image       String?  // Chemin de l'image uploadée (optionnel)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  managerId   Int
-  manager     User     @relation(fields: [managerId], references: [id])
-}
-model Investment {
-  id              Int      @id @default(autoincrement())
-  title           String
-  category        String   // Par exemple: "Infrastructures", "Agriculture", "Tourisme"
-  description     String   @db.Text
-  shortDescription String?
-  amount          String   // Montant de l'investissement 
-  startYear       String?  // Année de début
-  endYear         String?  // Année de fin
-  status          String   // Par exemple: "En recherche de partenaires", "Études préliminaires", "Recherche d'investisseurs"
-  image           String?  // Image illustrative du projet d'investissement
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  managerId       Int?     // Optionnel, si vous voulez suivre qui gère cet investissement
-  manager         User?    @relation(fields: [managerId], references: [id])
 }

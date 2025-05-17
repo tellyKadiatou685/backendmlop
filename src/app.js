@@ -12,6 +12,12 @@ import newsRoutes from './routes/news.routes.js';
 import administrativeProceduresRoutes from './routes/administrativeProcedures.routes.js';
 import investmentRoutes from './routes/investments.routes.js'; // Assurez-vous que ce fichier existe
 import projectsRoutes from './routes/projects.routes.js';
+import contactRoutes from './routes/contactRoutes.js';
+import galleryRoutes from './routes/gallery.routes.js';
+
+
+
+
 
 // Pour obtenir l'équivalent de __dirname en ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -79,6 +85,8 @@ app.use('/api/news', newsRoutes);
 app.use('/api/Procedures', administrativeProceduresRoutes);
 app.use('/api/investments', investmentRoutes); // Assurez-vous que investmentRoutes est bien défini
 app.use('/api/projects', projectsRoutes);
+app.use('/api/contact', contactRoutes);
+app.use('/api/gallery', galleryRoutes);
 
 // Route de test CORS
 app.get('/api/cors-test', (req, res) => {
