@@ -11,7 +11,7 @@ import {
 const router = express.Router();
 
 // Créer un média (image/vidéo)
-router.post("/",  uploadMiddleware, createGalleryItem);
+router.post("/", uploadMiddleware, createGalleryItem);
 
 // Récupérer tous les médias
 router.get("/", getAllGalleryItems);
